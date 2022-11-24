@@ -1,12 +1,15 @@
-import Job from './Job';
-import type Cluster from './Cluster';
-import type { TaskFunction } from './Cluster';
-import type { Page } from 'puppeteer';
-import { timeoutExecute, debugGenerator, log } from './util';
-import { inspect } from 'util';
-import { WorkerInstance, JobInstance } from './concurrency/ConcurrencyImplementation';
+import Job from "./Job";
+import type Cluster from "./Cluster";
+import type { TaskFunction } from "./Cluster";
+import type { Page } from "puppeteer";
+import { timeoutExecute, debugGenerator, log } from "./util";
+import { inspect } from "util";
+import {
+    WorkerInstance,
+    JobInstance,
+} from "./concurrency/ConcurrencyImplementation";
 
-const debug = debugGenerator('Worker');
+const debug = debugGenerator("Worker");
 
 interface WorkerOptions {
     cluster: Cluster;
@@ -18,19 +21,18 @@ interface WorkerOptions {
 const BROWSER_INSTANCE_TRIES = 10;
 
 export interface WorkError {
-    type: 'error';
+    type: "error";
     error: Error;
 }
 
 export interface WorkData {
-    type: 'success';
+    type: "success";
     data: any;
 }
 
 export type WorkResult = WorkError | WorkData;
 
 export default class Worker<JobData, ReturnData> implements WorkerOptions {
-
     cluster: Cluster;
     args: string[];
     id: number;
@@ -48,10 +50,10 @@ export default class Worker<JobData, ReturnData> implements WorkerOptions {
     }
 
     public async handle(
-            task: TaskFunction<JobData, ReturnData>,
-            job: Job<JobData, ReturnData>,
-            timeout: number,
-        ): Promise<WorkResult> {
+        task: TaskFunction<JobData, ReturnData>,
+        job: Job<JobData, ReturnData>,
+        timeout: number
+    ): Promise<WorkResult> {
         this.activeTarget = job;
 
         let jobInstance: JobInstance | null = null;
@@ -61,29 +63,44 @@ export default class Worker<JobData, ReturnData> implements WorkerOptions {
 
         while (jobInstance === null) {
             try {
-                jobInstance = await this.browser.jobInstance();
+                jobInstance = await this.browser.jobInstance(
+                    Object.prototype.toString.call(job.data) ===
+                        "[object Object]"
+                        ? job.data
+                        : undefined
+                );
                 page = jobInstance.resources.page;
             } catch (err: any) {
-                debug(`Error getting browser page (try: ${tries}), message: ${err.message}`);
+                debug(
+                    `Error getting browser page (try: ${tries}), message: ${err.message}`
+                );
                 await this.browser.repair();
                 tries += 1;
                 if (tries >= BROWSER_INSTANCE_TRIES) {
-                    throw new Error('Unable to get browser page');
+                    throw new Error("Unable to get browser page");
                 }
             }
         }
 
-         // We can be sure that page is set now, otherwise an exception would've been thrown
+        // We can be sure that page is set now, otherwise an exception would've been thrown
         page = page as Page; // this is just for TypeScript
 
         let errorState: Error | null = null;
 
-        page.on('error', (err) => {
+        page.on("error", (err) => {
             errorState = err;
-            log(`Error (page error) crawling ${inspect(job.data)} // message: ${err.message}`);
+            log(
+                `Error (page error) crawling ${inspect(job.data)} // message: ${
+                    err.message
+                }`
+            );
         });
 
-        debug(`Executing task on worker #${this.id} with data: ${inspect(job.data)}`);
+        debug(
+            `Executing task on worker #${this.id} with data: ${inspect(
+                job.data
+            )}`
+        );
 
         let result: any;
         try {
@@ -98,11 +115,13 @@ export default class Worker<JobData, ReturnData> implements WorkerOptions {
                     worker: {
                         id: this.id,
                     },
-                }),
+                })
             );
         } catch (err: any) {
             errorState = err;
-            log(`Error crawling ${inspect(job.data)} // message: ${err.message}`);
+            log(
+                `Error crawling ${inspect(job.data)} // message: ${err.message}`
+            );
         }
 
         debug(`Finished executing task on worker #${this.id}`);
@@ -110,7 +129,11 @@ export default class Worker<JobData, ReturnData> implements WorkerOptions {
         try {
             await jobInstance.close();
         } catch (e: any) {
-            debug(`Error closing browser instance for ${inspect(job.data)}: ${e.message}`);
+            debug(
+                `Error closing browser instance for ${inspect(job.data)}: ${
+                    e.message
+                }`
+            );
             await this.browser.repair();
         }
 
@@ -118,13 +141,13 @@ export default class Worker<JobData, ReturnData> implements WorkerOptions {
 
         if (errorState) {
             return {
-                type: 'error',
-                error: errorState || new Error('asf'),
+                type: "error",
+                error: errorState || new Error("asf"),
             };
         }
         return {
             data: result,
-            type: 'success',
+            type: "success",
         };
     }
 
@@ -132,9 +155,10 @@ export default class Worker<JobData, ReturnData> implements WorkerOptions {
         try {
             await this.browser.close();
         } catch (err: any) {
-            debug(`Unable to close worker browser. Error message: ${err.message}`);
+            debug(
+                `Unable to close worker browser. Error message: ${err.message}`
+            );
         }
         debug(`Closed #${this.id}`);
     }
-
 }
